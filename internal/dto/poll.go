@@ -14,6 +14,6 @@ type CreatePollRequest struct {
 }
 
 type VoteRequest struct {
-	PoolID uint64 `json:"poll_id" validate:"required"`
-	Option string `json:"option" validate:"required"`
+	PoolID uint64 `json:"poll_id"`
+	Option string `json:"option"`
 }
