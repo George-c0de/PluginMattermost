@@ -27,7 +27,7 @@ func NewTarantoolStorage(host string, port int) (*TarantoolStorage, error) {
 
 	conn, err := tarantool.Connect(ctx, dialer, opts)
 	if err != nil {
-		fmt.Println("Connection refused:", err)
+		log.Println("Connection refused:", err)
 		panic(err)
 	}
 
