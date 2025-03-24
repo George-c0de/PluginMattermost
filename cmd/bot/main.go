@@ -41,12 +41,15 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/create", pollHandler.CreatePoll).Methods("POST")
 	r.HandleFunc("/vote", pollHandler.Vote).Methods("POST")
-	r.HandleFunc("/results", pollHandler.Results).Methods("GET", "POST")
+	r.HandleFunc("/results", pollHandler.Results).Methods("GET")
 
 	// (Опционально) эндпоинт для проверки "живости" сервиса
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, err := w.Write([]byte("OK"))
+		if err != nil {
+			return
+		}
 	}).Methods("GET")
 
 	log.Println("Server is running on port 8080")

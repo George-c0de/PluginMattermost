@@ -1,9 +1,11 @@
 package storage
 
 import (
+	"PluginMattermost/internal/dto"
 	"context"
 	"fmt"
 	"github.com/tarantool/go-tarantool/v2"
+	"log"
 	"time"
 )
 
@@ -11,15 +13,7 @@ type TarantoolStorage struct {
 	conn *tarantool.Connection
 }
 
-type Poll struct {
-	ID       uint64            `json:"id"`
-	Question string            `json:"question"`
-	Options  []string          `json:"options"`
-	Votes    map[string]uint64 `json:"votes"` // ключ — вариант, значение — кол-во голосов
-}
-
 func NewTarantoolStorage(host string, port int) (*TarantoolStorage, error) {
-	// Обратите внимание, что теперь нужно вызывать NewConnection, а не Connect
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	dialer := tarantool.NetDialer{
@@ -41,21 +35,21 @@ func NewTarantoolStorage(host string, port int) (*TarantoolStorage, error) {
 }
 
 // CreatePoll Создать новый опрос
-func (t *TarantoolStorage) CreatePoll(poll *Poll) error {
+func (t *TarantoolStorage) CreatePoll(poll *dto.Poll) error {
 	var future *tarantool.Future
 	request := tarantool.NewInsertRequest("polls").Tuple([]interface{}{poll.ID, poll.Question, poll.Options, poll.Votes})
 	future = t.conn.Do(request)
 	result, err := future.Get()
 	if err != nil {
-		fmt.Println("Got an error:", err)
+		log.Println("Got an error:", err)
 	} else {
-		fmt.Println(result)
+		log.Println(result)
 	}
 	return err
 }
 
 // GetPoll Получить опрос по ID
-func (t *TarantoolStorage) GetPoll(id uint64) (*Poll, error) {
+func (t *TarantoolStorage) GetPoll(id uint64) (*dto.Poll, error) {
 	data, err := t.conn.Do(
 		tarantool.NewSelectRequest("polls").Iterator(tarantool.IterEq).Key([]interface{}{id}),
 	).Get()
@@ -67,10 +61,8 @@ func (t *TarantoolStorage) GetPoll(id uint64) (*Poll, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("poll not found")
 	}
-	fmt.Println(data)
 	tuple := data[0].([]interface{})
-	fmt.Println(tuple)
-	poll := Poll{
+	poll := dto.Poll{
 		ID:       tuple[0].(uint64),
 		Question: tuple[1].(string),
 		Options:  toStringSlice(tuple[2]),
@@ -80,12 +72,12 @@ func (t *TarantoolStorage) GetPoll(id uint64) (*Poll, error) {
 }
 
 // UpdatePoll Обновить данные опроса
-func (t *TarantoolStorage) UpdatePoll(poll *Poll) error {
+func (t *TarantoolStorage) UpdatePoll(poll *dto.Poll) error {
 	data, err := t.conn.Do(tarantool.NewReplaceRequest("polls").Tuple([]interface{}{poll.ID, poll.Question, poll.Options, poll.Votes})).Get()
 	if err != nil {
-		fmt.Println("Got an error:", err)
+		log.Println("Got an error:", err)
 	}
-	fmt.Println("Replaced tuple:", data)
+	log.Println("Replaced tuple:", data)
 	return err
 }
 
@@ -110,7 +102,7 @@ func toMapStringUint64(val interface{}) map[string]uint64 {
 	result := make(map[string]uint64)
 	for k, v := range m {
 		keyStr := k.(string)
-		valUint := uint64(v.(uint64))
+		valUint := v.(uint64)
 		result[keyStr] = valUint
 	}
 	return result

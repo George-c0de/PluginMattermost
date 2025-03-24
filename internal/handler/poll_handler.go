@@ -1,14 +1,13 @@
 package handler
 
 import (
+	"PluginMattermost/internal/dto"
 	"PluginMattermost/internal/storage"
 	"encoding/json"
 	"log"
 	"math/rand"
 	"net/http"
 	"strconv"
-	"strings"
-	"time"
 )
 
 type PollHandler struct {
@@ -19,35 +18,17 @@ func NewPollHandler(store *storage.TarantoolStorage) *PollHandler {
 	return &PollHandler{store: store}
 }
 
-// Пример структуры запроса на создание опроса
-type CreatePollRequest struct {
-	Question string   `json:"question"`
-	Options  []string `json:"options"`
-}
-
 func (h *PollHandler) CreatePoll(w http.ResponseWriter, r *http.Request) {
 	// Логируем
 	log.Println("Received CreatePoll request")
 
-	// Предположим, что данные могут приходить либо JSON-ом, либо формой (slash-команда)
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "cannot parse form", http.StatusBadRequest)
+	var req dto.CreatePollRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
-
-	question := r.FormValue("question")
-	options := r.Form["options"]
-
-	// Если нет question, пробуем считать JSON
-	if question == "" && len(options) == 0 {
-		var req CreatePollRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid json", http.StatusBadRequest)
-			return
-		}
-		question = req.Question
-		options = req.Options
-	}
+	question := req.Question
+	options := req.Options
 
 	if question == "" || len(options) == 0 {
 		http.Error(w, "invalid poll data", http.StatusBadRequest)
@@ -55,11 +36,10 @@ func (h *PollHandler) CreatePoll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Генерируем случайный ID (в реальном проекте лучше использовать атомарный счётчик в Tarantool)
-	rand.Seed(time.Now().UnixNano())
-	pollID := uint64(rand.Intn(9999999))
+	pollID := rand.Uint64()
 
 	// Создаём структуру Poll
-	poll := &storage.Poll{
+	poll := &dto.Poll{
 		ID:       pollID,
 		Question: question,
 		Options:  options,
@@ -78,42 +58,31 @@ func (h *PollHandler) CreatePoll(w http.ResponseWriter, r *http.Request) {
 		"options":  options,
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	err := json.NewEncoder(w).Encode(resp)
+	if err != nil {
+		return
+	}
 }
 
 func (h *PollHandler) Vote(w http.ResponseWriter, r *http.Request) {
 	log.Println("Received Vote request")
-
-	if err := json.NewDecoder(r.Body).Decode(&r); err != nil {
+	var data dto.VoteRequest
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		log.Println(err)
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
-	pollIDStr := r.FormValue("poll_id")
-	option := r.FormValue("option")
-
-	// Для slash-команд, где всё может быть одной строкой, например: /poll vote 123 "Go"
-	// Можно парсить r.FormValue("text") и разбирать вручную. Примерно так:
-	if pollIDStr == "" || option == "" {
-		text := r.FormValue("text")
-		if text != "" {
-			parts := strings.SplitN(text, " ", 2)
-			if len(parts) == 2 {
-				pollIDStr = parts[0]
-				option = strings.Trim(parts[1], `" `)
-			}
-		}
+	if data.PoolID == 0 {
+		http.Error(w, "poll_id is required", http.StatusBadRequest)
+		return
 	}
-
-	if pollIDStr == "" || option == "" {
-		http.Error(w, "missing poll_id or option", http.StatusBadRequest)
+	if data.Option == "" {
+		http.Error(w, "option is required", http.StatusBadRequest)
 		return
 	}
 
-	pollID, err := strconv.ParseUint(pollIDStr, 10, 64)
-	if err != nil {
-		http.Error(w, "invalid poll_id", http.StatusBadRequest)
-		return
-	}
+	pollID := data.PoolID
+	option := data.Option
 
 	poll, err := h.store.GetPoll(pollID)
 	if err != nil {
@@ -144,22 +113,16 @@ func (h *PollHandler) Vote(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("vote accepted"))
+	_, err = w.Write([]byte("vote accepted"))
+	if err != nil {
+		return
+	}
 }
 
 func (h *PollHandler) Results(w http.ResponseWriter, r *http.Request) {
 	log.Println("Received Results request")
 
 	pollIDStr := r.URL.Query().Get("poll_id")
-	if pollIDStr == "" {
-		// Или парсим как slash-команду
-		if err := r.ParseForm(); err == nil {
-			pollIDStr = r.FormValue("poll_id")
-			if pollIDStr == "" {
-				pollIDStr = r.FormValue("text") // /poll results 123
-			}
-		}
-	}
 
 	if pollIDStr == "" {
 		http.Error(w, "missing poll_id", http.StatusBadRequest)
@@ -186,5 +149,8 @@ func (h *PollHandler) Results(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	err = json.NewEncoder(w).Encode(resp)
+	if err != nil {
+		return
+	}
 }
