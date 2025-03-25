@@ -36,15 +36,15 @@ func NewTarantoolStorage(host string, port int) (*TarantoolStorage, error) {
 
 // CreatePoll Создать новый опрос
 func (t *TarantoolStorage) CreatePoll(poll *dto.Poll) error {
-	var future *tarantool.Future
-	request := tarantool.NewInsertRequest("polls").Tuple([]interface{}{poll.ID, poll.Question, poll.Options, poll.Votes})
-	future = t.conn.Do(request)
-	result, err := future.Get()
+	_, err := t.conn.Do(
+		tarantool.NewInsertRequest("polls").Tuple(
+			[]interface{}{poll.ID, poll.Question, poll.Options, poll.Votes, poll.Closed, poll.UserVotes},
+		),
+	).Get()
 	if err != nil {
-		log.Println("Got an error:", err)
-	} else {
-		log.Println(result)
+		log.Fatalf("Got an error: %v", err)
 	}
+
 	return err
 }
 
@@ -63,19 +63,38 @@ func (t *TarantoolStorage) GetPoll(id uint64) (*dto.Poll, error) {
 	}
 	tuple := data[0].([]interface{})
 	poll := dto.Poll{
-		ID:       tuple[0].(uint64),
-		Question: tuple[1].(string),
-		Options:  toStringSlice(tuple[2]),
-		Votes:    toMapStringUint64(tuple[3]),
+		ID:        tuple[0].(uint64),
+		Question:  tuple[1].(string),
+		Options:   toStringSlice(tuple[2]),
+		Votes:     toMapStringUint64(tuple[3]),
+		Closed:    tuple[4].(bool),
+		UserVotes: toMapStringString(tuple[5]),
 	}
 	return &poll, nil
 }
 
-// UpdatePoll Обновить данные опроса
-func (t *TarantoolStorage) UpdatePoll(poll *dto.Poll) error {
-	data, err := t.conn.Do(tarantool.NewReplaceRequest("polls").Tuple([]interface{}{poll.ID, poll.Question, poll.Options, poll.Votes})).Get()
+// ReplacePoll Обновить данные опроса
+func (t *TarantoolStorage) ReplacePoll(poll *dto.Poll) error {
+	data, err := t.conn.Do(
+		tarantool.NewReplaceRequest("polls").Tuple(
+			[]interface{}{poll.ID, poll.Question, poll.Options, poll.Votes, poll.Closed, poll.UserVotes},
+		),
+	).Get()
 	if err != nil {
-		log.Println("Got an error:", err)
+		log.Fatalf("Got an error: %v", err)
+	}
+	log.Println("Replaced tuple:", data)
+	return err
+}
+
+func (t *TarantoolStorage) UpdatePoll(pollId uint64) error {
+	data, err := t.conn.Do(
+		tarantool.NewUpdateRequest("polls").Key(tarantool.UintKey{I: uint(pollId)}).Operations(
+			tarantool.NewOperations().Assign(4, true),
+		),
+	).Get()
+	if err != nil {
+		log.Fatalf("Got an error: %v", err)
 	}
 	log.Println("Replaced tuple:", data)
 	return err
@@ -103,6 +122,19 @@ func toMapStringUint64(val interface{}) map[string]uint64 {
 	for k, v := range m {
 		keyStr := k.(string)
 		valUint := v.(uint64)
+		result[keyStr] = valUint
+	}
+	return result
+}
+func toMapStringString(val interface{}) map[string]string {
+	m, ok := val.(map[interface{}]interface{})
+	if !ok {
+		return map[string]string{}
+	}
+	result := make(map[string]string)
+	for k, v := range m {
+		keyStr := k.(string)
+		valUint := v.(string)
 		result[keyStr] = valUint
 	}
 	return result

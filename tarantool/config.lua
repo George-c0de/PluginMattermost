@@ -12,6 +12,8 @@ if not box.space.polls then
             {name = 'question', type = 'string'},
             {name = 'options', type = 'array'},
             {name = 'votes', type = 'map'},
+            {name = 'closed',   type = 'boolean'},
+            {name = 'user_votes', type = 'map'},
         },
         if_not_exists = true
     })
