@@ -13,10 +13,11 @@ func NewRouter(pollHandler *handler.PollHandler) *mux.Router {
 	router.HandleFunc("/create", pollHandler.CreatePoll).Methods("POST")
 	router.HandleFunc("/closed", pollHandler.EndPoll).Methods("POST")
 	router.HandleFunc("/results", pollHandler.Results).Methods("GET")
-	router.HandleFunc("/health", pollHandler.HealthHandler).Methods("GET")
 
 	router.Handle("/vote", middleware.UserIDMiddleware(http.HandlerFunc(pollHandler.Vote))).Methods("POST")
 	router.Handle("/vote", middleware.UserIDMiddleware(http.HandlerFunc(pollHandler.DeleteVote))).Methods("DELETE")
+
+	router.HandleFunc("/health", pollHandler.HealthHandler).Methods("GET")
 
 	return router
 }
