@@ -2,24 +2,24 @@ package storage
 
 import (
 	"PluginMattermost/internal/dto"
+	"PluginMattermost/internal/logger"
 	"context"
 	"fmt"
 	"github.com/tarantool/go-tarantool/v2"
-	"log"
 	"time"
 )
 
 type TarantoolStorage struct {
 	conn *tarantool.Connection
+	log  *logger.Logger
 }
 
-func NewTarantoolStorage(host string, port int) (*TarantoolStorage, error) {
+func MustNewTarantoolStorage(host string, port int, log *logger.Logger) *TarantoolStorage {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	dialer := tarantool.NetDialer{
 		Address: fmt.Sprintf("%s:%d", host, port),
-		//User:     "sampleuser",
-		//Password: "123456",
+		// TODO(George): Добавить пользователя и пароль
 	}
 	opts := tarantool.Opts{
 		Timeout: time.Second,
@@ -27,11 +27,10 @@ func NewTarantoolStorage(host string, port int) (*TarantoolStorage, error) {
 
 	conn, err := tarantool.Connect(ctx, dialer, opts)
 	if err != nil {
-		log.Println("Connection refused:", err)
 		panic(err)
 	}
 
-	return &TarantoolStorage{conn: conn}, nil
+	return &TarantoolStorage{conn: conn, log: log}
 }
 
 // CreatePoll Создать новый опрос
@@ -42,7 +41,7 @@ func (t *TarantoolStorage) CreatePoll(poll *dto.Poll) error {
 		),
 	).Get()
 	if err != nil {
-		log.Fatalf("Got an error: %v", err)
+		t.log.Error("Got an error:", err)
 	}
 
 	return err
@@ -55,10 +54,12 @@ func (t *TarantoolStorage) GetPoll(id uint64) (*dto.Poll, error) {
 	).Get()
 
 	if err != nil {
+		t.log.Error("Got an error:", err)
 		return nil, err
 	}
 
 	if len(data) == 0 {
+		t.log.Info("poll not found")
 		return nil, fmt.Errorf("poll not found")
 	}
 	tuple := data[0].([]interface{})
@@ -75,28 +76,26 @@ func (t *TarantoolStorage) GetPoll(id uint64) (*dto.Poll, error) {
 
 // ReplacePoll Обновить данные опроса
 func (t *TarantoolStorage) ReplacePoll(poll *dto.Poll) error {
-	data, err := t.conn.Do(
+	_, err := t.conn.Do(
 		tarantool.NewReplaceRequest("polls").Tuple(
 			[]interface{}{poll.ID, poll.Question, poll.Options, poll.Votes, poll.Closed, poll.UserVotes},
 		),
 	).Get()
 	if err != nil {
-		log.Fatalf("Got an error: %v", err)
+		t.log.Error("Got an error:", err)
 	}
-	log.Println("Replaced tuple:", data)
 	return err
 }
 
 func (t *TarantoolStorage) UpdatePoll(pollId uint64) error {
-	data, err := t.conn.Do(
+	_, err := t.conn.Do(
 		tarantool.NewUpdateRequest("polls").Key(tarantool.UintKey{I: uint(pollId)}).Operations(
 			tarantool.NewOperations().Assign(4, true),
 		),
 	).Get()
 	if err != nil {
-		log.Fatalf("Got an error: %v", err)
+		t.log.Error("Got an error:", err)
 	}
-	log.Println("Replaced tuple:", data)
 	return err
 }
 

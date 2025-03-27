@@ -3,27 +3,24 @@ package main
 import (
 	"PluginMattermost/internal/config"
 	"PluginMattermost/internal/handler"
+	"PluginMattermost/internal/logger"
 	"PluginMattermost/internal/server"
 	"PluginMattermost/internal/storage"
 	"fmt"
-	"log"
 )
 
 func main() {
 	cfg := config.MustGetConfig()
 
+	log := logger.SetupLogger(cfg.Env)
+
 	// Инициализируем хранилище (Tarantool)
-	store, err := storage.NewTarantoolStorage(cfg.TarantoolHost, cfg.TarantoolPort)
-	if err != nil {
-		log.Fatalf("Failed to connect to Tarantool: %v", err)
-	}
+	store := storage.MustNewTarantoolStorage(cfg.TarantoolHost, cfg.TarantoolPort, log)
 
 	// Создаём PollHandler
-	pollHandler := handler.NewPollHandler(store)
+	pollHandler := handler.NewPollHandler(store, log)
 
 	// Инициализируем роутер и сервер
 	router := server.NewRouter(pollHandler)
-	if err := server.StartServer(fmt.Sprintf(":%d", cfg.PortHttp), router); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
-	}
+	server.MustStartServer(fmt.Sprintf(":%d", cfg.PortHttp), router)
 }

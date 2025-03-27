@@ -2,9 +2,9 @@ package handler
 
 import (
 	"PluginMattermost/internal/dto"
+	"PluginMattermost/internal/logger"
 	"PluginMattermost/internal/storage"
 	"encoding/json"
-	"log"
 	"math/rand"
 	"net/http"
 	"strconv"
@@ -12,38 +12,47 @@ import (
 
 type PollHandler struct {
 	store *storage.TarantoolStorage
+	log   *logger.Logger
 }
 
-func NewPollHandler(store *storage.TarantoolStorage) *PollHandler {
-	return &PollHandler{store: store}
+func NewPollHandler(store *storage.TarantoolStorage, log *logger.Logger) *PollHandler {
+	return &PollHandler{store: store, log: log}
 }
 
 // respondWithJSON отправляет JSON-ответ с указанным статусом
-func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
+func (h *PollHandler) respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
-		log.Printf("Failed to write JSON response: %v", err)
+		h.log.Error("Failed to write JSON response:", err)
+	}
+}
+
+// HealthHandler обеспечивает базовую проверку "живости" сервиса.
+func (h *PollHandler) HealthHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write([]byte("OK")); err != nil {
+		h.log.Error("health check write error", err)
 	}
 }
 
 // respondWithError отправляет JSON-ответ с ошибкой
-func respondWithError(w http.ResponseWriter, code int, message string) {
-	respondWithJSON(w, code, map[string]string{"error": message})
+func (h *PollHandler) respondWithError(w http.ResponseWriter, code int, message string) {
+	h.respondWithJSON(w, code, map[string]string{"error": message})
 }
 func (h *PollHandler) CreatePoll(w http.ResponseWriter, r *http.Request) {
-	log.Println("Received CreatePoll request")
+	h.log.Debug("Received CreatePoll request")
 
 	var req dto.CreatePollRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondWithError(w, http.StatusBadRequest, "invalid json")
+		h.respondWithError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
 	question := req.Question
 	options := req.Options
 
 	if question == "" || len(options) == 0 {
-		respondWithError(w, http.StatusBadRequest, "invalid poll data")
+		h.respondWithError(w, http.StatusBadRequest, "invalid poll data")
 		return
 	}
 
@@ -61,7 +70,7 @@ func (h *PollHandler) CreatePoll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.store.CreatePoll(poll); err != nil {
-		respondWithError(w, http.StatusInternalServerError, "failed to create poll")
+		h.respondWithError(w, http.StatusInternalServerError, "failed to create poll")
 		return
 	}
 
@@ -71,29 +80,28 @@ func (h *PollHandler) CreatePoll(w http.ResponseWriter, r *http.Request) {
 		"question": question,
 		"options":  options,
 	}
-	respondWithJSON(w, http.StatusCreated, resp)
+	h.respondWithJSON(w, http.StatusCreated, resp)
 }
 
 func (h *PollHandler) Vote(w http.ResponseWriter, r *http.Request) {
-	log.Println("Received Vote request")
+	h.log.Debug("Received Vote request")
+
 	userID, ok := r.Context().Value("user_id").(string)
 	if !ok || userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "user_id not found")
+		h.respondWithError(w, http.StatusUnauthorized, "user_id not found")
 		return
 	}
-	log.Println(userID)
 	var data dto.VoteRequest
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-		log.Println(err)
-		respondWithError(w, http.StatusUnprocessableEntity, "invalid json")
+		h.respondWithError(w, http.StatusUnprocessableEntity, "invalid json")
 		return
 	}
 	if data.PoolID == 0 {
-		respondWithError(w, http.StatusUnprocessableEntity, "poll_id is required")
+		h.respondWithError(w, http.StatusUnprocessableEntity, "poll_id is required")
 		return
 	}
 	if data.Option == "" {
-		respondWithError(w, http.StatusUnprocessableEntity, "option is required")
+		h.respondWithError(w, http.StatusUnprocessableEntity, "option is required")
 		return
 	}
 
@@ -102,11 +110,11 @@ func (h *PollHandler) Vote(w http.ResponseWriter, r *http.Request) {
 
 	poll, err := h.store.GetPoll(pollID)
 	if err != nil {
-		http.Error(w, "poll not found", http.StatusNotFound)
+		h.respondWithError(w, http.StatusNotFound, "poll not found")
 		return
 	}
 	if poll.Closed {
-		http.Error(w, "poll is already closed", http.StatusBadRequest)
+		h.respondWithError(w, http.StatusBadRequest, "poll is already closed")
 		return
 	}
 
@@ -119,14 +127,14 @@ func (h *PollHandler) Vote(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !validOption {
-		http.Error(w, "invalid option", http.StatusBadRequest)
+		h.respondWithError(w, http.StatusBadRequest, "invalid option")
 		return
 	}
 
 	// Если пользователь уже голосовал, отклоняем повторное голосование
 	if poll.UserVotes != nil {
 		if _, exists := poll.UserVotes[userID]; exists {
-			respondWithError(w, http.StatusBadRequest, "user already voted")
+			h.respondWithError(w, http.StatusBadRequest, "user already voted")
 			return
 		}
 	} else {
@@ -137,31 +145,31 @@ func (h *PollHandler) Vote(w http.ResponseWriter, r *http.Request) {
 	poll.UserVotes[userID] = data.Option
 	// Сохраняем
 	if err := h.store.ReplacePoll(poll); err != nil {
-		http.Error(w, "failed to update poll", http.StatusInternalServerError)
+		h.respondWithError(w, http.StatusInternalServerError, "failed to update poll")
 		return
 	}
-	respondWithJSON(w, http.StatusOK, map[string]string{"message": "vote accepted"})
+	h.respondWithJSON(w, http.StatusOK, map[string]string{"message": "vote accepted"})
 }
 
 func (h *PollHandler) Results(w http.ResponseWriter, r *http.Request) {
-	log.Println("Received Results request")
+	h.log.Debug("Received Results request")
 
 	pollIDStr := r.URL.Query().Get("poll_id")
 
 	if pollIDStr == "" {
-		http.Error(w, "missing poll_id", http.StatusBadRequest)
+		h.respondWithError(w, http.StatusUnprocessableEntity, "missing poll_id")
 		return
 	}
 
 	pollID, err := strconv.ParseUint(pollIDStr, 10, 64)
 	if err != nil {
-		http.Error(w, "invalid poll_id", http.StatusBadRequest)
+		h.respondWithError(w, http.StatusBadRequest, "invalid poll_id")
 		return
 	}
 
 	poll, err := h.store.GetPoll(pollID)
 	if err != nil {
-		http.Error(w, "poll not found", http.StatusNotFound)
+		h.respondWithError(w, http.StatusNotFound, "poll not found")
 		return
 	}
 
@@ -174,54 +182,52 @@ func (h *PollHandler) Results(w http.ResponseWriter, r *http.Request) {
 		"user_votes": poll.UserVotes,
 	}
 
-	respondWithJSON(w, http.StatusOK, resp)
+	h.respondWithJSON(w, http.StatusOK, resp)
 }
 
 // EndPoll завершает голосование (ставит флаг Closed = true)
 func (h *PollHandler) EndPoll(w http.ResponseWriter, r *http.Request) {
-	log.Println("Received EndPoll request")
+	h.log.Debug("Received EndPoll request")
 
 	data := struct {
 		PollID uint64 `json:"poll_id"`
 	}{}
 
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-		log.Println(err)
-		http.Error(w, "invalid json", http.StatusBadRequest)
+		h.respondWithError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
 	if data.PollID == 0 {
-		http.Error(w, "poll_id is required", http.StatusBadRequest)
+		h.respondWithError(w, http.StatusBadRequest, "poll_id is required")
 		return
 	}
 	err := h.store.UpdatePoll(data.PollID)
 	if err != nil {
-		http.Error(w, "poll not found", http.StatusNotFound)
+		h.respondWithError(w, http.StatusNotFound, "internal error")
 		return
 	}
-	respondWithJSON(w, http.StatusOK, map[string]string{"message": "poll closed"})
+	h.respondWithJSON(w, http.StatusOK, map[string]string{"message": "poll closed"})
 }
 
 func (h *PollHandler) DeleteVote(w http.ResponseWriter, r *http.Request) {
-	log.Println("Received Vote request")
+	h.log.Debug("Received Vote request")
 	// Получаем user_id из контекста
 	userID, ok := r.Context().Value("user_id").(string)
 	if !ok || userID == "" {
-		respondWithError(w, http.StatusUnauthorized, "user_id not found")
+		h.respondWithError(w, http.StatusUnauthorized, "user_id not found")
 		return
 	}
 	var data dto.VoteRequest
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-		log.Println(err)
-		http.Error(w, "invalid json", http.StatusBadRequest)
+		h.respondWithError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
 	if data.PoolID == 0 {
-		http.Error(w, "poll_id is required", http.StatusBadRequest)
+		h.respondWithError(w, http.StatusBadRequest, "poll_id is required")
 		return
 	}
 	if data.Option == "" {
-		http.Error(w, "option is required", http.StatusBadRequest)
+		h.respondWithError(w, http.StatusBadRequest, "option is required")
 		return
 	}
 
@@ -230,11 +236,11 @@ func (h *PollHandler) DeleteVote(w http.ResponseWriter, r *http.Request) {
 
 	poll, err := h.store.GetPoll(pollID)
 	if err != nil {
-		http.Error(w, "poll not found", http.StatusNotFound)
+		h.respondWithError(w, http.StatusNotFound, "poll not found")
 		return
 	}
 	if poll.Closed {
-		http.Error(w, "poll is already closed", http.StatusBadRequest)
+		h.respondWithError(w, http.StatusBadRequest, "poll is already closed")
 		return
 	}
 
@@ -247,13 +253,13 @@ func (h *PollHandler) DeleteVote(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !validOption {
-		http.Error(w, "invalid option", http.StatusBadRequest)
+		h.respondWithError(w, http.StatusBadRequest, "invalid option")
 		return
 	}
 	// Проверяем, что голос принадлежит пользователю
 	votedOption, exists := poll.UserVotes[userID]
 	if !exists || votedOption != data.Option {
-		respondWithError(w, http.StatusBadRequest, "vote for this user not found")
+		h.respondWithError(w, http.StatusBadRequest, "vote for this user not found")
 		return
 	}
 
@@ -266,8 +272,8 @@ func (h *PollHandler) DeleteVote(w http.ResponseWriter, r *http.Request) {
 
 	// Сохраняем
 	if err := h.store.ReplacePoll(poll); err != nil {
-		http.Error(w, "failed to update poll", http.StatusInternalServerError)
+		h.respondWithError(w, http.StatusInternalServerError, "failed to update poll")
 		return
 	}
-	respondWithJSON(w, http.StatusOK, map[string]string{"message": "vote removed"})
+	h.respondWithJSON(w, http.StatusOK, map[string]string{"message": "vote removed"})
 }
