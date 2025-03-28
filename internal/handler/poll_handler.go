@@ -4,6 +4,7 @@ package handler
 import (
 	"PluginMattermost/internal/dto"
 	"PluginMattermost/internal/logger"
+	"PluginMattermost/internal/middleware"
 	"PluginMattermost/internal/storage"
 	"encoding/json"
 	"math/rand"
@@ -92,7 +93,7 @@ func (h *PollHandler) CreatePoll(w http.ResponseWriter, r *http.Request) {
 func (h *PollHandler) Vote(w http.ResponseWriter, r *http.Request) {
 	h.log.Debug("Received Vote request")
 
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDKey).(string)
 	if !ok || userID == "" {
 		h.respondWithError(w, http.StatusUnauthorized, "user_id not found")
 		return
@@ -220,7 +221,7 @@ func (h *PollHandler) EndPoll(w http.ResponseWriter, r *http.Request) {
 func (h *PollHandler) DeleteVote(w http.ResponseWriter, r *http.Request) {
 	h.log.Debug("Received Vote request")
 	// Получаем user_id из контекста
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDKey).(string)
 	if !ok || userID == "" {
 		h.respondWithError(w, http.StatusUnauthorized, "user_id not found")
 		return

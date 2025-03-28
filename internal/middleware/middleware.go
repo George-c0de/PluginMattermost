@@ -10,7 +10,7 @@ import (
 
 type contextKey string
 
-const userIDKey = contextKey("user_id")
+const UserIDKey = contextKey("user_id")
 
 // UserIDMiddleware проверяет наличие cookie "user_id" и, если её нет
 func UserIDMiddleware(next http.Handler) http.Handler {
@@ -29,7 +29,7 @@ func UserIDMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Добавляем user_id в контекст запроса
-		ctx := context.WithValue(r.Context(), userIDKey, userID)
+		ctx := context.WithValue(r.Context(), UserIDKey, userID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
