@@ -1,3 +1,4 @@
+// Package logger Базовая структура для работы с логером
 package logger
 
 import (
@@ -11,6 +12,7 @@ const (
 	envProd  = "prod"
 )
 
+// SetupLogger инициализирует и возвращает указатель на Logger в зависимости от переданного окружения
 func SetupLogger(env string) *Logger {
 	var logger *slog.Logger
 
@@ -34,17 +36,22 @@ func SetupLogger(env string) *Logger {
 	return &Logger{logger: logger}
 }
 
+// Logger Стурктура для работы с Logger
 type Logger struct {
 	logger *slog.Logger
 }
 
+// Info Запись уровня Info
 func (l *Logger) Info(msg string, args ...any) {
-	l.logger.Info(msg, args)
-}
-func (l *Logger) Error(msg string, args ...any) {
-	l.logger.Error(msg, args)
+	l.logger.Info(msg, args...)
 }
 
+// Error Запись уровня Error
+func (l *Logger) Error(msg string, args ...any) {
+	l.logger.Error(msg, args...)
+}
+
+// Debug Запись уровня Debug
 func (l *Logger) Debug(msg string, args ...any) {
-	l.logger.Debug(msg, args)
+	l.logger.Debug(msg, args...)
 }

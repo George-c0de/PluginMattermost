@@ -1,10 +1,12 @@
+// Package server Подключение router
 package server
 
 import (
 	"PluginMattermost/internal/handler"
 	"PluginMattermost/internal/middleware"
-	"github.com/gorilla/mux"
 	"net/http"
+
+	"github.com/gorilla/mux"
 )
 
 // NewRouter настраивает роутер и регистрирует эндпоинты.

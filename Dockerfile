@@ -18,8 +18,5 @@ FROM alpine:latest
 WORKDIR /root/
 COPY --from=builder /bot /usr/local/bin/bot
 
-# Указываем порт
-EXPOSE 8080
-
 # Запускаем бота
 CMD ["bot"]

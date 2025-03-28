@@ -1,3 +1,4 @@
+// Package main Запуск приложения
 package main
 
 import (
@@ -22,5 +23,5 @@ func main() {
 
 	// Инициализируем роутер и сервер
 	router := server.NewRouter(pollHandler)
-	server.MustStartServer(fmt.Sprintf(":%d", cfg.PortHttp), router)
+	server.MustStartServer(fmt.Sprintf(":%d", cfg.PortHTTP), router)
 }

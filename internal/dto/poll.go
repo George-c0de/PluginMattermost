@@ -1,5 +1,7 @@
+// Package dto DTO для обмена данных
 package dto
 
+// Poll Структура для работы с опросом
 type Poll struct {
 	ID        uint64            `json:"id"`
 	Question  string            `json:"question"`
@@ -15,6 +17,7 @@ type CreatePollRequest struct {
 	Options  []string `json:"options"`
 }
 
+// VoteRequest Структура для голосования
 type VoteRequest struct {
 	PoolID uint64 `json:"poll_id"`
 	Option string `json:"option"`

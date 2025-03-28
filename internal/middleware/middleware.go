@@ -1,3 +1,4 @@
+// Package middleware Получение User_id
 package middleware
 
 import (
@@ -6,6 +7,10 @@ import (
 	"net/http"
 	"strconv"
 )
+
+type contextKey string
+
+const userIDKey = contextKey("user_id")
 
 // UserIDMiddleware проверяет наличие cookie "user_id" и, если её нет
 func UserIDMiddleware(next http.Handler) http.Handler {
@@ -24,7 +29,7 @@ func UserIDMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Добавляем user_id в контекст запроса
-		ctx := context.WithValue(r.Context(), "user_id", userID)
+		ctx := context.WithValue(r.Context(), userIDKey, userID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

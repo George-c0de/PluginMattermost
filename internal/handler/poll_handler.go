@@ -1,3 +1,4 @@
+// Package handler для работы с Tarantool
 package handler
 
 import (
@@ -10,11 +11,13 @@ import (
 	"strconv"
 )
 
+// PollHandler Структура для работы с опросами
 type PollHandler struct {
 	store *storage.TarantoolStorage
 	log   *logger.Logger
 }
 
+// NewPollHandler Создание структуры для работы с опросами
 func NewPollHandler(store *storage.TarantoolStorage, log *logger.Logger) *PollHandler {
 	return &PollHandler{store: store, log: log}
 }
@@ -29,7 +32,7 @@ func (h *PollHandler) respondWithJSON(w http.ResponseWriter, code int, payload i
 }
 
 // HealthHandler обеспечивает базовую проверку "живости" сервиса.
-func (h *PollHandler) HealthHandler(w http.ResponseWriter, r *http.Request) {
+func (h *PollHandler) HealthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("OK")); err != nil {
 		h.log.Error("health check write error", err)
@@ -40,6 +43,8 @@ func (h *PollHandler) HealthHandler(w http.ResponseWriter, r *http.Request) {
 func (h *PollHandler) respondWithError(w http.ResponseWriter, code int, message string) {
 	h.respondWithJSON(w, code, map[string]string{"error": message})
 }
+
+// CreatePoll Создание опроса
 func (h *PollHandler) CreatePoll(w http.ResponseWriter, r *http.Request) {
 	h.log.Debug("Received CreatePoll request")
 
@@ -83,6 +88,7 @@ func (h *PollHandler) CreatePoll(w http.ResponseWriter, r *http.Request) {
 	h.respondWithJSON(w, http.StatusCreated, resp)
 }
 
+// Vote Голосование пользователя
 func (h *PollHandler) Vote(w http.ResponseWriter, r *http.Request) {
 	h.log.Debug("Received Vote request")
 
@@ -151,6 +157,7 @@ func (h *PollHandler) Vote(w http.ResponseWriter, r *http.Request) {
 	h.respondWithJSON(w, http.StatusOK, map[string]string{"message": "vote accepted"})
 }
 
+// Results Возвращает все опросы
 func (h *PollHandler) Results(w http.ResponseWriter, r *http.Request) {
 	h.log.Debug("Received Results request")
 
@@ -209,6 +216,7 @@ func (h *PollHandler) EndPoll(w http.ResponseWriter, r *http.Request) {
 	h.respondWithJSON(w, http.StatusOK, map[string]string{"message": "poll closed"})
 }
 
+// DeleteVote Удаление голоса
 func (h *PollHandler) DeleteVote(w http.ResponseWriter, r *http.Request) {
 	h.log.Debug("Received Vote request")
 	// Получаем user_id из контекста

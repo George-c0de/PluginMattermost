@@ -1,3 +1,4 @@
+// Package storage запросы в tarantool
 package storage
 
 import (
@@ -5,15 +6,18 @@ import (
 	"PluginMattermost/internal/logger"
 	"context"
 	"fmt"
-	"github.com/tarantool/go-tarantool/v2"
 	"time"
+
+	"github.com/tarantool/go-tarantool/v2"
 )
 
+// TarantoolStorage Структура для работы с Tarantool
 type TarantoolStorage struct {
 	conn *tarantool.Connection
 	log  *logger.Logger
 }
 
+// MustNewTarantoolStorage Создается новое подключение к Tarantool
 func MustNewTarantoolStorage(host string, port int, log *logger.Logger) *TarantoolStorage {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -87,9 +91,10 @@ func (t *TarantoolStorage) ReplacePoll(poll *dto.Poll) error {
 	return err
 }
 
-func (t *TarantoolStorage) UpdatePoll(pollId uint64) error {
+// UpdatePoll Закрывает опрос
+func (t *TarantoolStorage) UpdatePoll(pollID uint64) error {
 	_, err := t.conn.Do(
-		tarantool.NewUpdateRequest("polls").Key(tarantool.UintKey{I: uint(pollId)}).Operations(
+		tarantool.NewUpdateRequest("polls").Key(tarantool.UintKey{I: uint(pollID)}).Operations(
 			tarantool.NewOperations().Assign(4, true),
 		),
 	).Get()
